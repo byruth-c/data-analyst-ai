@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block titulo %}Evolução mensal · Data Analyst AI{% endblock %}
+{% block trilha %}Análises{% endblock %}
+{% block pagina_titulo %}Evolução mensal{% endblock %}
+{% block subtitulo %}Faturamento, pedidos e ticket médio mês a mês{% endblock %}
+
+{% block conteudo %}
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">
+            <strong>Não foi possível consultar o banco de dados.</strong>
+            <p>Verifique se o PostgreSQL está em execução (<code>docker compose ps</code>).</p>
+            <p class="alerta-detalhe">{{ erro }}</p>
+        </div>
+    {% elif not meses %}
+        <div class="alerta" role="status">
+            Nenhum registro encontrado na tabela fato_vendas.
+        </div>
+    {% else %}
+        <!-- Resumo do período: somas das mesmas linhas exibidas no histórico -->
+        <section class="cards" aria-label="Resumo do período">
+            <article class="card">
+                <p class="card-rotulo">Período</p>
+                <p class="card-valor card-valor-texto">{{ resumo.periodo }}</p>
+                <p class="card-detalhe">
+                    {{ resumo.quantidade_meses }} meses
+                    {% if resumo.meses_sem_vendas %}· {{ resumo.meses_sem_vendas }} sem vendas{% endif %}
+                </p>
+            </article>
+
+            <article class="card card-destaque">
+                <p class="card-rotulo">Faturamento no período</p>
+                <p class="card-valor">R$ {{ resumo.faturamento }}</p>
+                <p class="card-detalhe">Soma de valor_item, sem frete</p>
+            </article>
+
+            <article class="card card-sucesso">
+                <p class="card-rotulo">Pedidos no período</p>
+                <p class="card-valor">{{ resumo.pedidos }}</p>
+                <p class="card-detalhe">Pedidos com itens, somados mês a mês</p>
+            </article>
+
+            <article class="card">
+                <p class="card-rotulo">Ticket médio do período</p>
+                <p class="card-valor">
+                    {% if resumo.ticket_medio %}R$ {{ resumo.ticket_medio }}{% else %}—{% endif %}
+                </p>
+                <p class="card-detalhe">Faturamento ÷ pedidos</p>
+            </article>
+        </section>
+
+        <!-- Gráfico de linha do faturamento mensal -->
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Faturamento mensal</h2>
+                <p>Valor dos produtos (sem frete) por mês da compra; meses sem vendas aparecem com R$ 0,00</p>
+            </header>
+            <div class="grafico-area grafico-area-alta">
+                <canvas id="grafico-evolucao" aria-label="Gráfico de linha do faturamento mensal" role="img"></canvas>
+            </div>
+        </article>
+
+        <!-- Histórico: mesmas linhas e textos da ferramenta consultar_evolucao_mensal -->
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Histórico mensal</h2>
+                <p>Todos os status de pedido · variação do faturamento em relação ao mês anterior</p>
+            </header>
+
+            <p class="nota">
+                Os meses nas pontas do período (início em 2016 e 09/2018) têm poucos dias com vendas,
+                por isso suas variações são extremas e não indicam tendência.
+            </p>
+
+            <div class="tabela-container">
+                <table class="tabela">
+                    <thead>
+                        <tr>
+                            <th scope="col">Mês</th>
+                            <th scope="col" class="numero">Faturamento</th>
+                            <th scope="col" class="numero">Frete</th>
+                            <th scope="col" class="numero">Total com frete</th>
+                            <th scope="col" class="numero">Pedidos</th>
+                            <th scope="col" class="numero">Itens</th>
+                            <th scope="col" class="numero">Ticket médio</th>
+                            <th scope="col" class="numero">Variação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in meses %}
+                            <tr{% if linha.sem_vendas %} class="linha-sem-vendas"{% endif %}>
+                                <td class="mes">
+                                    {{ linha.mes }}
+                                    {% if linha.sem_vendas %}<span class="etiqueta">sem vendas</span>{% endif %}
+                                </td>
+                                <td class="numero destaque">R$ {{ linha.faturamento }}</td>
+                                <td class="numero">R$ {{ linha.frete }}</td>
+                                <td class="numero">R$ {{ linha.total }}</td>
+                                <td class="numero">{{ linha.pedidos }}</td>
+                                <td class="numero">{{ linha.itens }}</td>
+                                <td class="numero">{{ linha.ticket_medio }}</td>
+                                <td class="numero variacao variacao-{{ linha.classe_variacao }}">{{ linha.variacao }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        {{ grafico_evolucao|json_script:"dados-grafico-evolucao" }}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {% if meses %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script>
+            // Espera a fonte Inter para o Chart.js medir os rótulos corretamente.
+            document.fonts.ready.then(() => {
+                criarGraficoEvolucao("grafico-evolucao", "dados-grafico-evolucao");
+            });
+        </script>
+    {% endif %}
+{% endblock %}

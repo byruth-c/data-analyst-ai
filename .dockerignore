@@ -1,0 +1,8 @@
+# Não copiar para a imagem: segredos, ambiente do Windows, dados brutos e caches
+.env
+.venv/
+__pycache__/
+*.py[cod]
+data/raw/
+db.sqlite3
+.git/

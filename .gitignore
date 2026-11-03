@@ -1,0 +1,11 @@
+# Segredos (senha do PostgreSQL, chave do Gemini)
+.env
+
+# Ambiente virtual e arquivos compilados do Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Dados brutos do Olist (121 MB, públicos no Kaggle) e banco local
+data/raw/
+db.sqlite3

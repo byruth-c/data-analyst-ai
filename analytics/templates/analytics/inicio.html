@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block titulo %}Visão geral · Data Analyst AI{% endblock %}
+{% block trilha %}Painel{% endblock %}
+{% block pagina_titulo %}Visão geral{% endblock %}
+{% block subtitulo %}Indicadores gerais dos pedidos e pagamentos{% endblock %}
+
+{% block conteudo %}
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">
+            <strong>Não foi possível consultar o banco de dados.</strong>
+            <p>Verifique se o PostgreSQL está em execução (<code>docker compose ps</code>).</p>
+            <p class="alerta-detalhe">{{ erro }}</p>
+        </div>
+    {% else %}
+        <!-- Cards de indicadores: valores vindos da view, mesmas consultas de consultar_indicadores -->
+        <section class="cards" aria-label="Indicadores gerais">
+            <article class="card">
+                <p class="card-rotulo">Total de pedidos</p>
+                <p class="card-valor">{{ indicadores.total_pedidos }}</p>
+                <p class="card-detalhe">Todos os status</p>
+            </article>
+
+            <article class="card card-sucesso">
+                <p class="card-rotulo">Pedidos entregues</p>
+                <p class="card-valor">{{ indicadores.pedidos_entregues }}</p>
+                <p class="card-detalhe">{{ indicadores.percentual_entregues }} do total</p>
+            </article>
+
+            <article class="card card-alerta">
+                <p class="card-rotulo">Pedidos cancelados</p>
+                <p class="card-valor">{{ indicadores.pedidos_cancelados }}</p>
+                <p class="card-detalhe">{{ indicadores.percentual_cancelados }} do total</p>
+            </article>
+
+            <article class="card card-destaque">
+                <p class="card-rotulo">Total pago</p>
+                <p class="card-valor">
+                    {% if indicadores.total_pago %}R$ {{ indicadores.total_pago }}{% else %}—{% endif %}
+                </p>
+                <p class="card-detalhe">Soma registrada em pagamentos</p>
+            </article>
+        </section>
+
+        <!-- Área de gráficos -->
+        <section class="graficos" aria-label="Gráficos">
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Pedidos por status</h2>
+                    <p>Distribuição dos pedidos entre entregues, cancelados e demais status</p>
+                </header>
+                <div class="grafico-area">
+                    <canvas id="grafico-status" aria-label="Gráfico de pedidos por status" role="img"></canvas>
+                </div>
+            </article>
+
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Análises disponíveis</h2>
+                    <p>Aprofunde os indicadores por categoria, período e padrão de vendas</p>
+                </header>
+                <nav class="atalhos" aria-label="Análises">
+                    <a href="{% url 'analytics:categorias' %}" class="atalho">
+                        <span class="atalho-icone" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+                        </span>
+                        <span class="atalho-texto"><strong>Categorias</strong><span class="atalho-descricao">Ranking das 10 categorias com maior faturamento</span></span>
+                    </a>
+                    <a href="{% url 'analytics:evolucao' %}" class="atalho">
+                        <span class="atalho-icone" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+                        </span>
+                        <span class="atalho-texto"><strong>Evolução mensal</strong><span class="atalho-descricao">Faturamento, pedidos e ticket médio mês a mês</span></span>
+                    </a>
+                    <a href="{% url 'analytics:tendencias' %}" class="atalho">
+                        <span class="atalho-icone" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 2 5-6"/></svg>
+                        </span>
+                        <span class="atalho-texto"><strong>Tendências</strong><span class="atalho-descricao">Média móvel, variações e possíveis anomalias</span></span>
+                    </a>
+                    <a href="{% url 'analytics:sazonalidade' %}" class="atalho">
+                        <span class="atalho-icone" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+                        </span>
+                        <span class="atalho-texto"><strong>Sazonalidade</strong><span class="atalho-descricao">Padrões por dia da semana e mês do ano</span></span>
+                    </a>
+                    <a href="{% url 'analytics:assistente' %}" class="atalho">
+                        <span class="atalho-icone" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l.9-5.4A8 8 0 1 1 21 12z"/></svg>
+                        </span>
+                        <span class="atalho-texto"><strong>Assistente IA</strong><span class="atalho-descricao">Pergunte sobre os dados em linguagem natural</span></span>
+                    </a>
+                </nav>
+            </article>
+        </section>
+
+        {{ grafico_status|json_script:"dados-grafico-status" }}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {% if not erro %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script>
+            // Espera a fonte Inter para o Chart.js medir os rótulos corretamente.
+            document.fonts.ready.then(() => {
+                criarGraficoStatus("grafico-status", "dados-grafico-status");
+            });
+        </script>
+    {% endif %}
+{% endblock %}

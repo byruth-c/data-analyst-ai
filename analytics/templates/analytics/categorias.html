@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block titulo %}Categorias · Data Analyst AI{% endblock %}
+{% block trilha %}Análises{% endblock %}
+{% block pagina_titulo %}Categorias{% endblock %}
+{% block subtitulo %}As 10 categorias com maior faturamento{% endblock %}
+
+{% block conteudo %}
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">
+            <strong>Não foi possível consultar o banco de dados.</strong>
+            <p>Verifique se o PostgreSQL está em execução (<code>docker compose ps</code>).</p>
+            <p class="alerta-detalhe">{{ erro }}</p>
+        </div>
+    {% elif not ranking %}
+        <div class="alerta" role="status">
+            Nenhum registro encontrado na tabela fato_vendas.
+        </div>
+    {% else %}
+        <!-- Gráfico: barras empilhadas de produtos + frete (= total com frete) -->
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Faturamento por categoria</h2>
+                <p>Valor dos produtos e do frete; o comprimento total da barra é o faturamento com frete</p>
+            </header>
+            <div class="grafico-area grafico-area-alta">
+                <canvas id="grafico-categorias" aria-label="Gráfico de faturamento das 10 maiores categorias" role="img"></canvas>
+            </div>
+        </article>
+
+        <!-- Ranking em tabela: valores vindos da view, mesma consulta de consultar_faturamento_por_categoria -->
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Ranking das 10 categorias</h2>
+                <p>Ordenado pelo faturamento sem frete · todos os status de pedido · nomes originais da base Olist, com o nome em inglês usado pelo assistente abaixo</p>
+            </header>
+            <div class="tabela-container">
+                <table class="tabela">
+                    <thead>
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Categoria</th>
+                            <th scope="col" class="numero">Faturamento (sem frete)</th>
+                            <th scope="col" class="numero">Frete</th>
+                            <th scope="col" class="numero">Total com frete</th>
+                            <th scope="col" class="numero">Itens</th>
+                            <th scope="col" class="numero">Pedidos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in ranking %}
+                            <tr>
+                                <td class="posicao">{{ linha.posicao }}</td>
+                                <td class="categoria">
+                                    {{ linha.categoria }}
+                                    {% if linha.categoria_mcp %}
+                                        <span class="categoria-original">{{ linha.categoria_mcp }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="numero destaque">R$ {{ linha.faturamento }}</td>
+                                <td class="numero">R$ {{ linha.frete }}</td>
+                                <td class="numero">R$ {{ linha.total }}</td>
+                                <td class="numero">{{ linha.itens }}</td>
+                                <td class="numero">{{ linha.pedidos }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        {{ grafico_categorias|json_script:"dados-grafico-categorias" }}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {% if ranking %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script>
+            // Espera a fonte Inter para o Chart.js medir os rótulos corretamente.
+            document.fonts.ready.then(() => {
+                criarGraficoCategorias("grafico-categorias", "dados-grafico-categorias");
+            });
+        </script>
+    {% endif %}
+{% endblock %}

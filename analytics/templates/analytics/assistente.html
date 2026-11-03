@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block titulo %}Assistente IA · Data Analyst AI{% endblock %}
+{% block trilha %}Inteligência artificial{% endblock %}
+{% block pagina_titulo %}Assistente IA{% endblock %}
+{% block subtitulo %}Perguntas sobre os dados do Olist, respondidas com as ferramentas MCP{% endblock %}
+
+{% block conteudo %}
+    <div class="alerta alerta-info" role="note">
+        <strong>Como funciona:</strong> o assistente (Gemini) consulta as ferramentas MCP do projeto e organiza
+        a resposta em <em>Dados</em>, <em>Cálculos</em> e <em>Interpretações</em>. Cada pergunta é independente.
+        No plano gratuito do Gemini há um limite de cerca de 20 requisições por dia, e cada pergunta usa
+        pelo menos 2.
+    </div>
+
+    <article class="painel">
+        <form method="post" class="formulario-pergunta" id="formulario-pergunta">
+            {% csrf_token %}
+            <label for="pergunta" class="rotulo-campo">Sua pergunta</label>
+            <textarea id="pergunta" name="pergunta" rows="3" maxlength="500" required
+                      placeholder="Ex.: Quais categorias mais faturaram? Existe sazonalidade nas vendas?">{{ pergunta }}</textarea>
+            <div class="formulario-rodape">
+                <span class="texto-suave texto-pequeno">Máximo de 500 caracteres. A resposta pode levar alguns segundos.</span>
+                <button type="submit" class="botao" id="botao-enviar">Enviar pergunta</button>
+            </div>
+        </form>
+    </article>
+
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">{{ erro }}</div>
+    {% endif %}
+
+    {% if resposta %}
+        <article class="painel resposta">
+            <header class="painel-cabecalho">
+                <h2>Resposta do Data Analyst AI</h2>
+                <p>{{ pergunta }}</p>
+            </header>
+            <div class="resposta-conteudo">
+                {{ resposta }}
+            </div>
+            <p class="texto-suave texto-pequeno espaco-topo">
+                Os números vêm das ferramentas MCP; as interpretações são hipóteses do modelo e devem ser verificadas.
+            </p>
+        </article>
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        configurarFormularioPergunta("formulario-pergunta", "botao-enviar");
+    </script>
+{% endblock %}

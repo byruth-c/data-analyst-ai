@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block titulo %}Tendências · Data Analyst AI{% endblock %}
+{% block trilha %}Análises{% endblock %}
+{% block pagina_titulo %}Tendências{% endblock %}
+{% block subtitulo %}Desempenho mensal, média móvel e possíveis anomalias{% endblock %}
+
+{% block conteudo %}
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">
+            <strong>Não foi possível consultar o banco de dados.</strong>
+            <p>Verifique se o PostgreSQL está em execução (<code>docker compose ps</code>).</p>
+            <p class="alerta-detalhe">{{ erro }}</p>
+        </div>
+    {% elif dados.vazio %}
+        <div class="alerta" role="status">Nenhum registro encontrado na tabela fato_vendas.</div>
+    {% else %}
+        {% if not dados.suficiente %}
+            <div class="alerta alerta-aviso" role="status">
+                Meses completos insuficientes para analisar tendências.
+            </div>
+        {% else %}
+            <!-- Mesmos cálculos da ferramenta MCP analisar_tendencias_vendas -->
+            <section class="cards" aria-label="Resumo das tendências">
+                <article class="card">
+                    <p class="card-rotulo">Meses comparados</p>
+                    <p class="card-valor card-valor-texto">{{ resumo.periodo }}</p>
+                    <p class="card-detalhe">{{ base.completos }} meses completos de {{ base.total_meses }}</p>
+                </article>
+                <article class="card card-sucesso">
+                    <p class="card-rotulo">Maior faturamento</p>
+                    <p class="card-valor">R$ {{ resumo.maior_valor }}</p>
+                    <p class="card-detalhe">{{ resumo.maior_mes }}</p>
+                </article>
+                <article class="card card-alerta">
+                    <p class="card-rotulo">Menor faturamento</p>
+                    <p class="card-valor">R$ {{ resumo.menor_valor }}</p>
+                    <p class="card-detalhe">{{ resumo.menor_mes }}</p>
+                </article>
+                <article class="card card-destaque">
+                    <p class="card-rotulo">Média mensal</p>
+                    <p class="card-valor">R$ {{ resumo.media }}</p>
+                    <p class="card-detalhe">Somente meses completos</p>
+                </article>
+            </section>
+
+            {% if resumo.amostra_pequena %}
+                <div class="alerta alerta-aviso" role="status">
+                    <strong>Atenção:</strong> apenas {{ base.completos }} meses completos. As tendências são
+                    apenas descritivas e não devem ser consideradas conclusões confiáveis.
+                </div>
+            {% endif %}
+
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Faturamento e média móvel de 3 meses</h2>
+                    <p>Somente meses completos · pontos vermelhos indicam possíveis anomalias na variação</p>
+                </header>
+                <div class="grafico-area grafico-area-alta">
+                    <canvas id="grafico-tendencias" aria-label="Gráfico de faturamento mensal e média móvel" role="img"></canvas>
+                </div>
+            </article>
+
+            <section class="graficos" aria-label="Variações e anomalias">
+                <article class="painel">
+                    <header class="painel-cabecalho">
+                        <h2>Variação em relação ao mês anterior</h2>
+                        <p>Variações com base insuficiente não são classificadas</p>
+                    </header>
+                    <dl class="lista-numeros">
+                        <div><dt>Variações válidas</dt><dd>{{ contagens.validas }}</dd></div>
+                        <div><dt>Crescimento</dt><dd class="texto-positivo">{{ contagens.crescimento }}</dd></div>
+                        <div><dt>Queda</dt><dd class="texto-negativo">{{ contagens.queda }}</dd></div>
+                        <div><dt>Estáveis (0,0%)</dt><dd>{{ contagens.estavel }}</dd></div>
+                        <div><dt>Base insuficiente</dt><dd>{{ contagens.insuficientes }}</dd></div>
+                    </dl>
+                </article>
+
+                <article class="painel">
+                    <header class="painel-cabecalho">
+                        <h2>Possíveis anomalias</h2>
+                        <p>Modified Z-Score = 0,6745 × (variação − mediana) ÷ MAD · anomalia quando |pontuação| &gt; 3,5</p>
+                    </header>
+                    {% if not anomalias %}
+                        <p class="texto-suave espaco-topo">Variações válidas insuficientes para o cálculo.</p>
+                    {% else %}
+                        <dl class="lista-numeros">
+                            <div><dt>Mediana das variações</dt><dd>{{ anomalias.mediana }}</dd></div>
+                            <div><dt>MAD</dt><dd>{{ anomalias.mad }} p.p.</dd></div>
+                        </dl>
+                        {% if anomalias.mad_zero %}
+                            <p class="texto-suave espaco-topo">MAD igual a zero: não foi possível calcular a pontuação robusta.</p>
+                        {% elif anomalias.lista %}
+                            <ul class="lista-anomalias">
+                                {% for linha in anomalias.lista %}
+                                    <li><strong>{{ linha.mes }}</strong>: variação de {{ linha.variacao }} (pontuação {{ linha.pontuacao }})</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="texto-suave espaco-topo">Nenhuma variação com pontuação robusta acima de 3,5.</p>
+                        {% endif %}
+                    {% endif %}
+                </article>
+            </section>
+
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Meses completos</h2>
+                    <p>Faturamento sem frete · todos os status de pedido</p>
+                </header>
+                <div class="tabela-container">
+                    <table class="tabela">
+                        <thead>
+                            <tr>
+                                <th scope="col">Mês</th>
+                                <th scope="col" class="numero">Faturamento</th>
+                                <th scope="col" class="numero">Média móvel (3 meses)</th>
+                                <th scope="col" class="numero">Variação</th>
+                                <th scope="col">Classificação</th>
+                                <th scope="col" class="numero">Pontuação robusta</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in linhas %}
+                                <tr{% if linha.anomalia %} class="linha-anomalia"{% endif %}>
+                                    <td class="mes">
+                                        {{ linha.mes }}
+                                        {% if linha.anomalia %}<span class="etiqueta">possível anomalia</span>{% endif %}
+                                    </td>
+                                    <td class="numero destaque">R$ {{ linha.faturamento }}</td>
+                                    <td class="numero">{% if linha.media_movel %}R$ {{ linha.media_movel }}{% else %}—{% endif %}</td>
+                                    {% if linha.situacao == "valida" %}
+                                        <td class="numero variacao-{% if linha.classe == 'crescimento' %}positiva{% elif linha.classe == 'queda' %}negativa{% else %}neutra{% endif %}">{{ linha.variacao }}</td>
+                                        <td>{{ linha.classe }}</td>
+                                        <td class="numero">{{ linha.pontuacao|default:"—" }}</td>
+                                    {% elif linha.situacao == "insuficiente" %}
+                                        <td class="texto-longo variacao-neutra" colspan="3">base insuficiente: {{ linha.motivo }}; variação não classificada e fora do cálculo de anomalias</td>
+                                    {% else %}
+                                        <td class="texto-longo variacao-neutra" colspan="3">primeiro mês comparado (sem mês anterior)</td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        {% endif %}
+
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Dados da base</h2>
+                <p>Primeira venda em {{ base.primeira_data }} · última venda em {{ base.ultima_data }}</p>
+            </header>
+            <ul class="lista-observacoes">
+                {% for item in incompletos %}
+                    <li><strong>{{ item.mes }}</strong>: mês incompleto ({{ item.motivo }}), faturamento R$ {{ item.faturamento }}, fora das comparações.</li>
+                {% empty %}
+                    <li>Nenhum mês incompleto nas extremidades.</li>
+                {% endfor %}
+                {% if base.sem_venda %}
+                    <li>Meses completos sem vendas (faturamento zero): {{ base.sem_venda }}.</li>
+                {% endif %}
+            </ul>
+        </article>
+
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Observações para interpretação</h2>
+            </header>
+            <ul class="lista-observacoes">
+                <li>As anomalias são estatísticas: indicam variações atípicas, não suas causas.</li>
+                <li>A base não contém informações sobre campanhas, sazonalidade ou eventos externos; qualquer explicação para as variações deve ser tratada como hipótese e confirmada com outras fontes.</li>
+                <li>Os meses incompletos não representam o desempenho real do mês e não devem ser comparados com os demais.</li>
+            </ul>
+        </article>
+
+        {% if dados.suficiente %}
+            {{ grafico_tendencias|json_script:"dados-grafico-tendencias" }}
+        {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {% if dados.suficiente %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script>
+            // Espera a fonte Inter para o Chart.js medir os rótulos corretamente.
+            document.fonts.ready.then(() => {
+                criarGraficoTendencias("grafico-tendencias", "dados-grafico-tendencias");
+            });
+        </script>
+    {% endif %}
+{% endblock %}

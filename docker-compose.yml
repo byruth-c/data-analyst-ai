@@ -1,0 +1,42 @@
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: data_analyst_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: data_analyst
+      POSTGRES_USER: analyst
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analyst -d data_analyst"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    container_name: data_analyst_web
+    restart: unless-stopped
+    # Senha do banco, chave do Gemini etc. vêm do .env (que não entra na imagem)
+    env_file: .env
+    environment:
+      # Dentro do Docker o banco é acessado pelo nome do serviço, na porta interna
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    ports:
+      - "8000:8000"
+    # Código montado no container: alterações aparecem sem reconstruir a imagem
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+

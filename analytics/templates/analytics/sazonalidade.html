@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block titulo %}Sazonalidade · Data Analyst AI{% endblock %}
+{% block trilha %}Análises{% endblock %}
+{% block pagina_titulo %}Sazonalidade{% endblock %}
+{% block subtitulo %}Padrões por dia da semana e por mês do ano{% endblock %}
+
+{% block conteudo %}
+    {% if erro %}
+        <div class="alerta alerta-erro" role="alert">
+            <strong>Não foi possível consultar o banco de dados.</strong>
+            <p>Verifique se o PostgreSQL está em execução (<code>docker compose ps</code>).</p>
+            <p class="alerta-detalhe">{{ erro }}</p>
+        </div>
+    {% elif dados.vazio %}
+        <div class="alerta" role="status">Nenhum registro encontrado na tabela fato_vendas.</div>
+    {% elif not dados.meses_completos %}
+        <div class="alerta alerta-aviso" role="status">Nenhum mês completo: não é possível analisar sazonalidade.</div>
+    {% else %}
+        <!-- Mesmos cálculos da ferramenta MCP analisar_sazonalidade_vendas -->
+        <section class="cards" aria-label="Resumo da base">
+            <article class="card">
+                <p class="card-rotulo">Período da base</p>
+                <p class="card-valor card-valor-texto">{{ base.primeira_data }} a {{ base.ultima_data }}</p>
+                <p class="card-detalhe">{{ base.completos }} meses completos · {{ base.incompletos }} incompletos</p>
+            </article>
+            <article class="card card-destaque">
+                <p class="card-rotulo">Anos civis completos</p>
+                <p class="card-valor card-valor-texto">{{ base.anos_civis }}</p>
+                <p class="card-detalhe">São necessários 2 ou mais para comparar anos</p>
+            </article>
+            <article class="card card-sucesso">
+                <p class="card-rotulo">Semanas analisadas</p>
+                <p class="card-valor">{{ semanal.validas }}</p>
+                <p class="card-detalhe">de {{ semanal.semanas }} semanas completas</p>
+            </article>
+            <article class="card">
+                <p class="card-rotulo">Meses com índice sazonal</p>
+                <p class="card-valor">{{ base.meses_com_indice }}</p>
+                <p class="card-detalhe">{% if base.periodo_indices %}{{ base.periodo_indices }}{% else %}sem 13 meses válidos seguidos{% endif %}</p>
+            </article>
+        </section>
+
+        <!-- Sazonalidade semanal: a parte mais confiável da análise -->
+        <h2 class="secao-titulo">Por dia da semana <span class="selo selo-confiavel">mais confiável</span></h2>
+
+        {% if not semanal.suficiente %}
+            <div class="alerta alerta-aviso" role="status">
+                Semanas válidas insuficientes para analisar o padrão semanal (mínimo 8).
+            </div>
+        {% else %}
+            <section class="graficos" aria-label="Sazonalidade semanal">
+                <article class="painel">
+                    <header class="painel-cabecalho">
+                        <h2>Faturamento médio por dia da semana</h2>
+                        <p>{{ semanal.validas }} semanas válidas · semanas com base insuficiente: {{ semanal.insuficientes }}</p>
+                    </header>
+                    <div class="grafico-area">
+                        <canvas id="grafico-semanal" aria-label="Gráfico de faturamento médio por dia da semana" role="img"></canvas>
+                    </div>
+                </article>
+
+                <article class="painel">
+                    <header class="painel-cabecalho">
+                        <h2>Comparação entre os dias</h2>
+                        <p>Destaques só quando a diferença supera o limite de 1%</p>
+                    </header>
+                    {% for conclusao in semanal.conclusoes %}
+                        <div class="conclusao">
+                            {% if conclusao.texto %}
+                                <p>{{ conclusao.texto }}</p>
+                            {% else %}
+                                <p><strong>{{ conclusao.maior }}</strong></p>
+                                <p>{{ conclusao.menor }}</p>
+                                {% if conclusao.percentual %}<p>Diferença entre o maior e o menor dia: {{ conclusao.percentual }}</p>{% endif %}
+                            {% endif %}
+                            <p class="texto-suave texto-pequeno">{{ conclusao.diferenca }}</p>
+                        </div>
+                    {% endfor %}
+                    <p class="texto-suave texto-pequeno espaco-topo">
+                        Os limites de 1% são critérios descritivos para não destacar diferenças desprezíveis;
+                        não são testes de significância estatística.
+                    </p>
+                </article>
+            </section>
+
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Detalhes por dia da semana</h2>
+                    <p>Índice = faturamento médio do dia ÷ média dos 7 dias (1,00 = dia médio)</p>
+                </header>
+                <div class="tabela-container">
+                    <table class="tabela">
+                        <thead>
+                            <tr>
+                                <th scope="col">Dia</th>
+                                <th scope="col" class="numero">Média</th>
+                                <th scope="col" class="numero">Mediana</th>
+                                <th scope="col" class="numero">MAD</th>
+                                <th scope="col" class="numero">Pedidos/dia</th>
+                                <th scope="col" class="numero">Índice</th>
+                                <th scope="col" class="numero">Acima da média da semana</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dia in semanal.dias %}
+                                <tr>
+                                    <td class="mes">{{ dia.nome }}</td>
+                                    <td class="numero destaque">R$ {{ dia.media }}</td>
+                                    <td class="numero">R$ {{ dia.mediana }}</td>
+                                    <td class="numero">R$ {{ dia.mad }}</td>
+                                    <td class="numero">{{ dia.pedidos }}</td>
+                                    <td class="numero indice-{{ dia.classe }}">{{ dia.indice }}</td>
+                                    <td class="numero">{{ dia.acima }} semanas</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        {% endif %}
+
+        <!-- Sazonalidade mensal: indicativa -->
+        <h2 class="secao-titulo">Por mês do ano <span class="selo selo-indicativo">indicativo</span></h2>
+
+        {% if base.quantidade_anos_civis < 2 %}
+            <div class="alerta alerta-aviso" role="status">
+                <strong>Atenção:</strong> menos de 2 ciclos anuais completos. Os índices sazonais mensais são
+                indicativos e não comprovam estatisticamente a existência de sazonalidade.
+            </div>
+        {% endif %}
+
+        <section class="graficos" aria-label="Sazonalidade mensal">
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Índice sazonal por mês do ano</h2>
+                    <p>Faturamento por dia ÷ tendência (média móvel centrada de 12 meses) · 1,00 = em linha com a tendência</p>
+                </header>
+                {% if grafico_indices.rotulos %}
+                    <div class="grafico-area">
+                        <canvas id="grafico-indices" aria-label="Gráfico de índice sazonal por mês" role="img"></canvas>
+                    </div>
+                {% else %}
+                    <p class="texto-suave espaco-topo">Nenhum mês com índice: não há 13 meses válidos consecutivos para estimar a tendência.</p>
+                {% endif %}
+            </article>
+
+            <article class="painel">
+                <header class="painel-cabecalho">
+                    <h2>Índices calculados</h2>
+                    <p>{% if normalizado %}Normalizados para somar 12{% else %}Não normalizados: nem todos os meses do ano têm índice{% endif %}</p>
+                </header>
+                <div class="tabela-container">
+                    <table class="tabela tabela-compacta">
+                        <thead>
+                            <tr>
+                                <th scope="col">Mês</th>
+                                <th scope="col" class="numero">Índice médio</th>
+                                {% if normalizado %}<th scope="col" class="numero">Normalizado</th>{% endif %}
+                                <th scope="col">Confiabilidade</th>
+                                <th scope="col" class="numero">Acima de 1,00</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in indices_mensais %}
+                                <tr>
+                                    <td class="mes">{{ item.mes }}</td>
+                                    {% if item.sem_indice %}
+                                        <td class="numero variacao-neutra" colspan="{% if normalizado %}4{% else %}3{% endif %}">sem índice</td>
+                                    {% else %}
+                                        <td class="numero indice-{{ item.classe }}">{{ item.indice }}</td>
+                                        {% if normalizado %}<td class="numero">{{ item.normalizado }}</td>{% endif %}
+                                        <td>{{ item.confianca }}</td>
+                                        <td class="numero">{{ item.acima }}</td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if resumo_indices %}
+                    <dl class="lista-numeros">
+                        <div><dt>Maior índice</dt><dd>{{ resumo_indices.maior }}</dd></div>
+                        <div><dt>Menor índice</dt><dd>{{ resumo_indices.menor }}</dd></div>
+                        {% if resumo_indices.amplitude %}<div><dt>Amplitude (maior ÷ menor)</dt><dd>{{ resumo_indices.amplitude }}</dd></div>{% endif %}
+                        {% if resumo_indices.coeficiente %}<div><dt>Coeficiente de variação</dt><dd>{{ resumo_indices.coeficiente }}</dd></div>{% endif %}
+                    </dl>
+                    {% if resumo_indices.parcial %}
+                        <p class="texto-suave texto-pequeno">Comparação feita entre {{ resumo_indices.quantidade }} de 12 meses do ano; os demais não têm índice.</p>
+                    {% endif %}
+                {% endif %}
+            </article>
+        </section>
+
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Matriz mês × ano</h2>
+                <p>Faturamento médio por dia · limite de base mínima: R$ {{ base.limite_base }} (1% da média mensal)</p>
+            </header>
+            <div class="tabela-container">
+                <table class="tabela matriz">
+                    <thead>
+                        <tr>
+                            <th scope="col">Mês</th>
+                            {% for ano in anos %}<th scope="col" class="numero">{{ ano }}</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in matriz %}
+                            <tr>
+                                <td class="mes">{{ linha.mes }}</td>
+                                {% for celula in linha.celulas %}
+                                    <td class="numero celula-{{ celula.classe }}">
+                                        {{ celula.texto }}
+                                        {% if celula.indice %}<span class="celula-nota">índice {{ celula.indice }}</span>{% endif %}
+                                        {% if celula.nota %}<span class="celula-nota">{{ celula.nota }}</span>{% endif %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Variação ano contra ano</h2>
+                <p>Faturamento por dia do mesmo mês · crescimento: {{ crescimento_anual }} · queda: {{ queda_anual }} · não comparáveis (mês incompleto): {{ nao_comparaveis }}</p>
+            </header>
+            <ul class="lista-observacoes">
+                {% for item in variacoes_anuais %}
+                    <li>{{ item.rotulo }}: <strong class="variacao-{% if item.classe == 'crescimento' %}positiva{% elif item.classe == 'queda' %}negativa{% else %}neutra{% endif %}">{{ item.variacao }}</strong></li>
+                {% empty %}
+                    <li>Nenhuma variação válida.</li>
+                {% endfor %}
+                {% for item in insuficientes_anuais %}
+                    <li>{{ item.rotulo }}: base insuficiente ({{ item.motivo }})</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article class="painel">
+            <header class="painel-cabecalho">
+                <h2>Observações para interpretação</h2>
+            </header>
+            <ul class="lista-observacoes">
+                <li>Os índices mensais comparam cada mês com a tendência estimada pela média móvel centrada de 12 meses, o que separa o crescimento da sazonalidade; com poucas observações por mês do ano, são indicativos e não uma comprovação estatística.</li>
+                <li>Meses do ano com apenas 1 observação não permitem comparar anos; o padrão pode não se repetir.</li>
+                <li>O padrão semanal se baseia em muito mais observações e é mais confiável que o mensal.</li>
+                <li>A base não contém informações sobre datas comemorativas, campanhas ou eventos externos; qualquer explicação para picos e quedas deve ser tratada como hipótese e confirmada com outras fontes.</li>
+            </ul>
+        </article>
+
+        {% if semanal.suficiente %}{{ semanal.grafico|json_script:"dados-grafico-semanal" }}{% endif %}
+        {{ grafico_indices|json_script:"dados-grafico-indices" }}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {% if dados.meses_completos %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script>
+            // Espera a fonte Inter para o Chart.js medir os rótulos corretamente.
+            document.fonts.ready.then(() => {
+                criarGraficoSemanal("grafico-semanal", "dados-grafico-semanal");
+                criarGraficoIndices("grafico-indices", "dados-grafico-indices");
+            });
+        </script>
+    {% endif %}
+{% endblock %}
